@@ -1,20 +1,20 @@
 ﻿#------------------------------------------------------------------------------
 #
-# Copyright (c) Microsoft Corporation. 
+# Copyright (c) Microsoft Corporation.
 # All rights reserved.
-# 
+#
 # This code is licensed under the MIT License.
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files(the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and / or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions :
-# 
+#
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.IN NO EVENT SHALL THE
@@ -43,7 +43,7 @@ OAUTH2_PARAMETERS = constants.OAuth2.Parameters
 TOKEN_RESPONSE_FIELDS = constants.TokenResponseFields
 OAUTH2_GRANT_TYPE = constants.OAuth2.GrantType
 OAUTH2_SCOPE = constants.OAuth2.Scope
-OAUTH2_DEVICE_CODE_RESPONSE_PARAMETERS = constants.OAuth2.DeviceCodeResponseParameters 
+OAUTH2_DEVICE_CODE_RESPONSE_PARAMETERS = constants.OAuth2.DeviceCodeResponseParameters
 SAML = constants.Saml
 ACCOUNT_TYPE = constants.UserRealm.account_type
 USER_ID = constants.TokenResponseFields.USER_ID
@@ -66,7 +66,7 @@ def _get_saml_grant_type(wstrust_response):
 
 class TokenRequest(object):
 
-    def __init__(self, call_context, authentication_context, client_id, 
+    def __init__(self, call_context, authentication_context, client_id,
                  resource, redirect_uri=None):
 
         self._log = log.Logger("TokenRequest", call_context['log_context'])
@@ -78,7 +78,7 @@ class TokenRequest(object):
         self._redirect_uri = redirect_uri
 
         self._cache_driver = None
-        
+
         # should be set at the beginning of get_token
         # functions that have a user_id
         self._user_id = None
@@ -88,8 +88,8 @@ class TokenRequest(object):
         self._polling_client = None
 
     def _create_user_realm_request(self, username):
-        return user_realm.UserRealm(self._call_context, 
-                                    username, 
+        return user_realm.UserRealm(self._call_context,
+                                    username,
                                     self._authentication_context.authority.url)
 
     def _create_mex(self, mex_endpoint):
@@ -100,12 +100,12 @@ class TokenRequest(object):
                                               applies_to, wstrust_endpoint_version)
 
     def _create_oauth2_client(self):
-        return oauth2_client.OAuth2Client(self._call_context, 
+        return oauth2_client.OAuth2Client(self._call_context,
                                           self._authentication_context.authority)
 
     def _create_self_signed_jwt(self):
-        return self_signed_jwt.SelfSignedJwt(self._call_context, 
-                                             self._authentication_context.authority, 
+        return self_signed_jwt.SelfSignedJwt(self._call_context,
+                                             self._authentication_context.authority,
                                              self._client_id)
 
     def _oauth_get_token(self, oauth_parameters):
@@ -158,11 +158,11 @@ class TokenRequest(object):
 
             oauth_parameters[OAUTH2_PARAMETERS.SCOPE] = OAUTH2_SCOPE.OPENID
 
-        add_parameter_if_available(oauth_parameters, OAUTH2_PARAMETERS.CLIENT_ID, 
+        add_parameter_if_available(oauth_parameters, OAUTH2_PARAMETERS.CLIENT_ID,
                                    self._client_id)
-        add_parameter_if_available(oauth_parameters, OAUTH2_PARAMETERS.RESOURCE, 
+        add_parameter_if_available(oauth_parameters, OAUTH2_PARAMETERS.RESOURCE,
                                    self._resource)
-        add_parameter_if_available(oauth_parameters, OAUTH2_PARAMETERS.REDIRECT_URI, 
+        add_parameter_if_available(oauth_parameters, OAUTH2_PARAMETERS.REDIRECT_URI,
                                    self._redirect_uri)
 
         return oauth_parameters
@@ -182,7 +182,7 @@ class TokenRequest(object):
 
         oauth_parameters = {}
         grant_type = _get_saml_grant_type(wstrust_response)
-        
+
         token_bytes = wstrust_response.token
         assertion = b64encode(token_bytes)
 
@@ -233,13 +233,13 @@ class TokenRequest(object):
             self._log.debug("Attempting mex at: %s", mex_endpoint)
             mex_instance = self._create_mex(mex_endpoint)
             wstrust_version = WSTrustVersion.UNDEFINED
-             
+
             try:
                 mex_instance.discover()
                 wstrust_endpoint = mex_instance.username_password_policy['url']
                 wstrust_version = mex_instance.username_password_policy['version']
             except Exception: #pylint: disable=broad-except
-                warn_template = ("MEX exchange failed for %s. " 
+                warn_template = ("MEX exchange failed for %s. "
                                  "Attempting fallback to AAD supplied endpoint.")
                 self._log.warn(warn_template, mex_endpoint)
                 wstrust_endpoint = self._user_realm.federation_active_auth_url
@@ -262,7 +262,7 @@ class TokenRequest(object):
 
         return WSTrustVersion.UNDEFINED
 
-    def get_token_with_username_password(self, username, password):
+    def get_token_with_username_password(self, username, password, client_secret):
         self._log.info("Acquiring token with username password.")
         self._user_id = username
         try:
@@ -271,17 +271,17 @@ class TokenRequest(object):
                 return token
         except AdalError as exp:
             self._log.warn(
-                'Attempt to look for token in cache resulted in Error: %s', 
+                'Attempt to look for token in cache resulted in Error: %s',
                 exp,
                 log_stack_trace=True)
- 
+
         if not self._authentication_context.authority.is_adfs_authority:
             self._user_realm = self._create_user_realm_request(username)
             self._user_realm.discover()
 
             try:
                 if self._user_realm.account_type == ACCOUNT_TYPE['Managed']:
-                    token = self._get_token_username_password_managed(username, password)
+                    token = self._get_token_username_password_managed(username, password, client_secret)
                 elif self._user_realm.account_type == ACCOUNT_TYPE['Federated']:
                     token = self._get_token_username_password_federated(username, password)
                 else:
@@ -293,8 +293,8 @@ class TokenRequest(object):
                 raise
         else:
             self._log.info('Skipping user realm discovery for ADFS authority')
-            token = self._get_token_username_password_managed(username, password)
-       
+            token = self._get_token_username_password_managed(username, password, client_secret)
+
         self._cache_driver.add(token)
         return token
 
@@ -306,8 +306,8 @@ class TokenRequest(object):
                 return token
         except AdalError as exp:
             self._log.warn(
-                'Attempt to look for token in cache resulted in Error: %s', 
-                exp, 
+                'Attempt to look for token in cache resulted in Error: %s',
+                exp,
                 log_stack_trace=True)
 
         oauth_parameters = self._create_oauth_parameters(OAUTH2_GRANT_TYPE.CLIENT_CREDENTIALS)
@@ -372,12 +372,12 @@ class TokenRequest(object):
             token = self._find_token_from_cache()
             if token:
                 return token
-        except AdalError as exp: 
+        except AdalError as exp:
             self._log.warn(
-                'Attempt to look for token in cache resulted in Error: %s', 
-                exp, 
+                'Attempt to look for token in cache resulted in Error: %s',
+                exp,
                 log_stack_trace=True)
-        
+
         return self._oauth_get_token(oauth_parameters)
 
     def get_token_with_device_code(self, user_code_info):
